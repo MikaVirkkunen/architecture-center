@@ -1,18 +1,19 @@
 ---
 title: Monolithic Persistence antipattern
 description: 
-
 author: dragon119
-manager: christb
-
-pnp.series.title: Optimize Performance
 ---
-# Monolithic Persistence antipattern
-[!INCLUDE [header](../../_includes/header.md)]
 
-All business applications use data, and they need to store this data somewhere. Many
-existing business applications make use of a single repository to store and retrieve
-data, regardless of how that data is used. This strategy is typically aimed at
+# Monolithic Persistence antipattern
+
+Putting all of an application's data into a single data store can hurt performance, either because it leads to resource contention, or because the data store is not a good fit for some of the data.
+
+## Problem description
+
+Historically, applications have often used a single data store, regardless of the different types of data that the application might need to store. Usually this was done to simplify the application design, or else to match the existing skillset of the development team.
+
+ 
+ This strategy is typically aimed at
 keeping the data storage requirements simple by using well understood technology, and
 might appear to make sense initially. Modern cloud-based systems often have
 additional functional and nonfunctional requirements, and besides the raw business
@@ -336,6 +337,8 @@ earlier this is a nontrivial task that may require redesigning the application.
 ----------
 
 ## Related resources
+
+Storage comparison guidance
 
 - [Azure Table Storage and Windows Azure SQL Database - Compared and Contrasted][TableStorageVersusDatabase]
 
