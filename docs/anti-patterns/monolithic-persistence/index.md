@@ -34,11 +34,11 @@ public class MonoController : ApiController
 }
 ```
 
-The rate at which log records are generated will probably affect the performance of the business operations. And if another component, such as an application process monitor, regularly reads and processes the log data, that can also affect the usiness operations.
+The rate at which log records are generated will probably affect the performance of the business operations. And if another component, such as an application process monitor, regularly reads and processes the log data, that can also affect the business operations.
 
 ## How to fix the problem
 
-Separate data according to its use, and select a data store that best matches how each data set will be used. 
+Separate data according to its use. For each data set, select a data store that best matches how that data set will be used. In the previous example, the application should be logging to a separate store from the database that holds business data: 
 
 ```csharp
 public class PolyController : ApiController
@@ -49,7 +49,7 @@ public class PolyController : ApiController
     public async Task<IHttpActionResult> PostAsync([FromBody]string value)
     {
         await DataAccess.InsertPurchaseOrderHeaderAsync(ProductionDb);
-        // Use a 
+        // Log to a different data store.
         await DataAccess.LogAsync(LogDb, LogTableName);
         return Ok();
     }
@@ -58,13 +58,12 @@ public class PolyController : ApiController
 
 ## Considerations
 
-- Separate data by the way it is used and how it is accessed. For example, don't store log information and business data in the same data store. These types of data have significantly different requirements patterns of access. Log records are inherently sequential, while business data is more likely to require random access.
+- Separate data by the way it is used and how it is accessed. For example, don't store log information and business data in the same data store. These types of data have significantly different requirements and patterns of access. Log records are inherently sequential, while business data is more likely to require random access, and is often relational.
 
-- Consider the data access pattern for each type of data. For example, store formatted reports and documents in a
-document database such as [Cosmos DB][CosmosDB], but use [Azure Redis Cache][Azure-cache] to cache temporary data.
+- Consider the data access pattern for each type of data. For example, store formatted reports and documents in a document database such as [Cosmos DB][CosmosDB], but use [Azure Redis Cache][Azure-cache] to cache temporary data.
 
 - If you follow this guidance but still reach the limits of the database, you may need to scale up the database. Also consider scaling
-horizontally and partitioning the load across database servers. However, partitioning may require redesigning the application.
+horizontally and partitioning the load across database servers. However, partitioning may require redesigning the application. For more information, see [Data partitioning][DataPartitioningGuidance].
 
 ## How to detect the problem
 
@@ -98,7 +97,7 @@ If you are monitoring the production system, you might notice patterns. For exam
 
 Look for correlations between increased response times and increased database activity or I/O to shared resources. If there are correlations, it means the database might be a bottleneck.
 
-### Identify data stores accessed during periods of poor performance
+### Identify which data stores are accessed during those periods
 
 The next graph shows the utililzation of database throughput units (DTU) during the load test. (A DTU is a measure of available capacity, and is a combination of CPU utilization, memory allocation, I/O rate.) Utilization of DTUs quickly reached 100%. This is roughly the point where the throughput peaked, in the previous graph. Database utilization remained very high until the test finished. There is a slight drop toward the end, which could be caused by throttling, competition for database connections, or other factors.
 
@@ -106,7 +105,7 @@ The next graph shows the utililzation of database throughput units (DTU) during 
 
 ### Examine the telemetry for the data stores
 
-Instrumented the data stores to capture the low level details of the activity. In the sample application, the data access statistics showed a high volume of insert operations performed against both the `PurchaseOrderHeader` table and the `MonoLog`. 
+Instrumented the data stores to capture the low level details of the activity. In the sample application, the data access statistics showed a high volume of insert operations performed against both the `PurchaseOrderHeader` table and the `MonoLog` table. 
 
 ![The data access statistics for the sample application][MonolithicDataAccessStats]
 
@@ -115,7 +114,7 @@ Instrumented the data stores to capture the low level details of the activity. I
 At this point, you can review the source code, focusing on the points where contended resources are accessed by the application. Look for situations such as:
 
 - Data that is logically separate being written to the same store. Data such as logs, reports, and queued messages should not be held in the same database as business information.
-- Information being held in a data store that is not optimal for that type of data, such as large blobs or XML documents in a relational database.
+- A mismatch between the choice of data store and the type of data, such as large blobs or XML documents in a relational database.
 - Data with significantly different usage patterns that share the same store, such as high-write, low-read data stored with the opposite.
 
 ### Implement the solution and verify the result
@@ -124,23 +123,22 @@ The application was changed to write logs to a separate data store. Here are the
 
 ![Load test performance results using the Polyglot controller][PolyglotScenarioLoadTest]
 
-The pattern of the throughput is similar to the earlier graph, but the point at which performance peaks is approximately 500 requests
+The pattern of throughput is similar to the earlier graph, but the point at which performance peaks is approximately 500 requests
 per second higher. The average response time is marginally lower. However, these statistics don't tell the full story. Telemetry for the business database shows that DTU utilization peaks at around 75%, rather than 100%.
 
 ![The database monitor in the Azure Management Portal showing resource utilization of the database in the polyglot scenarion][PolyglotDatabaseUtilization]
 
-Similarly, the maximum DTU utilization of the log database only reaches about 70%.
+Similarly, the maximum DTU utilization of the log database only reaches about 70%. The databases are no longer the limiting factor in the performance of the system.
 
 ![The database monitor in the Azure Management Portal showing resource utilization of the log database in the polyglot scenarion][LogDatabaseUtilization]
 
-The databases are no longer the limiting factor in the performance of the system.
 
 ## Related resources
 
 - [Choose the right data store][data-store-overview]
 - [Criteria for choosing a data store][data-store-comparison]
 - [Data Access for Highly-Scalable Solutions: Using SQL, NoSQL, and Polyglot Persistence][Data-Access-Guide]
-- [Data Partitioning Guidance][DataPartitioningGuidance]
+- [Data partitioning][DataPartitioningGuidance]
 
 [sample-app]: https://github.com/mspnp/performance-optimization/tree/master/MonolithicPersistence
 [CosmosDB]: http://azure.microsoft.com/services/cosmos-db/
