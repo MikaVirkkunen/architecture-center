@@ -33,7 +33,7 @@ following code looks to be the obvious way to upload a file to an Azure blob sto
 
 **C#**
 
-``` C#
+```csharp
 var storageAccount = CloudStorageAccount.Parse(...);
 var blobClient = storageAccount.CreateCloudBlobClient();
 var container = blobClient.GetContainerReference("uploadedfiles");
@@ -58,7 +58,7 @@ method will be blocked waiting for the response from the User Profile service.
 
 **C#**
 
-``` C#
+```csharp
 public class SyncController : ApiController
 {
     private readonly IUserProfileService _userProfileService;
@@ -87,7 +87,7 @@ asynchronous operations. For example:
 
 **C#**
 
-``` C#
+```csharp
 var result = LibraryIOOperation();
 // Wait while the method completes
 
@@ -248,7 +248,7 @@ example, the following code uploads data to Azure blob storage asynchronously.
 
 **C#**
 
-``` C#
+```csharp
 var storageAccount = CloudStorageAccount.Parse(...);
 var blobClient = storageAccount.CreateCloudBlobClient();
 var container = blobClient.GetContainerReference("uploadedfiles");
@@ -287,7 +287,7 @@ version of the User Profile service that doesn't block the calling thread.
 
 **C#**
 
-``` C#
+```csharp
 public class AsyncController : ApiController
 {
     private readonly IUserProfileService _userProfileService;
@@ -322,7 +322,7 @@ information, see the article [Should I expose asynchronous wrappers for synchron
 
 **C#**
 
-``` C#
+```csharp
 // Asynchronous wrapper around synchronous library method
 private async Task<int> LibraryIOOperationAsync()
 {

@@ -41,7 +41,7 @@ fail.
 
 **C#**
 
-```C#
+```csharp
 public class PersonRepository : IPersonRepository
 {
     public async Task<Person> GetAsync(int id)
@@ -298,7 +298,7 @@ library to communicate with the cache.
 
 **C#**
 
-```C#
+```csharp
 public class CachedPersonRepository : IPersonRepository
 {
     private readonly PersonRepository _innerRepository;

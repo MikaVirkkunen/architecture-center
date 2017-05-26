@@ -222,18 +222,20 @@ Symptoms of chatty I/O include high latency and low throughput. End users are li
 
 You can perform the following steps to help identify the causes of any problems:
 
-1. Perform process monitoring of the production system, to identify operations with poor response times.
+1. Perform process monitoring of the production system to identify operations with poor response times.
 2. Perform load testing of each operation identified in the previous step.
 3. During the load tests, gather telemetry data about the data access requests made by each operation.
 4. Gather detailed statistics for each request sent to a data store.
-5. Profile the application in the test environment to establish where possible I/O bottlenecks might be occurring. Look for any of these symptoms:
+5. Profile the application in the test environment to establish where possible I/O bottlenecks might be occurring. 
 
-    - A large number of small I/O requests made to the same file.
-    - A large number of small network requests made by an application instance to the same
-    service.
-    - A large number of small requests made by an application instance to the same data
-    store.
-    - Applications and services becoming I/O bound.
+Look for any of these symptoms:
+
+- A large number of small I/O requests made to the same file.
+- A large number of small network requests made by an application instance to the same
+service.
+- A large number of small requests made by an application instance to the same data
+store.
+- Applications and services becoming I/O bound.
 
 If you already have insight into the problem, you may be able to skip some of these steps. However, avoid making unfounded or biased assumptions. A thorough analysis can sometimes find unexpected causes of performance problems. 
 

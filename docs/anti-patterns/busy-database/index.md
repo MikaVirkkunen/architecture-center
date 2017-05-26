@@ -122,7 +122,7 @@ ORDER BY soh.[TotalDue] DESC, sod.[SalesOrderDetailID]
 
 The application then uses the .NET Framework `System.Xml.Linq` APIs to format the results as XML.
 
-```C#
+```csharp
 // Create a new SqlCommand to run the Transact-SQL query
 using (var command = new SqlCommand(...))
 {
