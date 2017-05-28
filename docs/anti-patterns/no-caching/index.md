@@ -1,45 +1,22 @@
 ---
 title: No Caching antipattern
 description: 
-
 author: dragon119
-manager: christb
-
-pnp.series.title: Optimize Performance
 ---
+
 # No Caching antipattern
-[!INCLUDE [header](../../_includes/header.md)]
 
-The purpose of caching is to avoid repeatedly retrieving the same information from a
-resource that is expensive to access, and/or to reduce the need to expend processing
-resources constructing the same items when they are required by multiple requests. In
-a cloud service that has to handle many concurrent requests, the overhead associated
-with repeated operations can impact the performance and scalability of the system.
+In a cloud application that handles many concurrent requests, repeatedly fetching the same data can reduce performance and scalability. 
 
-Caching can also help reduce costs by reducing traffic into and out of resources
-such as data stores that make a charge for each request. In some cases, resource
-access might be metered and limited depending on the level of service provided by the
-resource host. Exceeding the resource access limit during a specified period of time
-might make the resource inaccessible or result in increased charges. Examples of such
-resources include Azure SQL Database where the rate of work and the number of
-transactions that can be performed each month are governed by the number of database
-throughput units (DTUs) provided by the service tier and performance level selected
-for the service. A higher service tier and performance level grants more DTUs, but at
-a higher monthly fee.
+## Problem description
 
-The following code snippet shows an example method that uses Entity Framework to
-connect to the [AdventureWorks2012][AdventureWorks2012] sample database implemented
-using Azure SQL Database. The method then fetches the details of a customer
-(returned as a `Person` object) specified by the `id` parameter. Each time this
-method runs, it incurs the expense of communicating with the database. In a system
-designed to support multiple concurrent users, separate requests might retrieve the
-same information from the database. The costs associated with repeated requests (in
-terms of I/O overhead and data access charges) can accumulate quickly. Additionally,
-if the system is unable to connect to the database for some reason then requests will
-fail.
+When data is not cached, it can cause 
 
+- Repeatedly retrieving the same information from a resource that is expensive to access, in terms of I/O overhead or latency, such as a database.
+- Using processing resources to construct the same items for multiple requests.
+- Making excessive calls to a service that charges for consumption, or that has service quotas and throttles clients past a certain limit.
 
-**C#**
+The following code uses Entity Framework to connect to a database. Every client request results in a call to the database, even if multiple requests are fetching exactly the same data. The cost of repeated requests, in terms of I/O overhead and data access charges, can accumulate quickly. You can find the complete sample [here][sample-app].
 
 ```csharp
 public class PersonRepository : IPersonRepository
@@ -57,32 +34,90 @@ public class PersonRepository : IPersonRepository
 }
 ```
 
-This code forms part of the [CachingDemo sample application][fullDemonstrationOfProblem].
-
 This antipattern typically occurs because:
 
-- It is easier to write code that reads and writes data directly to a data store. <<RBC: This seems like an odd thing to include, or an odd way to word it. But maybe it's very important and I'm just not the audience...>>
+- Adding caching makes the code more complicated. Directly reading and writing to a data store is the simplest implementation.  
+- There is concern about the overhead of maintaining the accuracy and freshness of cached data.
+- An application was migrated from an on-premises system, where network latency was not an issue, the system ran on expensive high-performance hardware, and
+so caching wasn't considered in the original design. 
+- Developers aren't aware that caching is a possibility in a given scenario. For example, developers may not think of using ETags when implementing a web API.
+- The benefits and drawbacks of using a cache are not clearly understood.
 
-- There is a perception that users always demand to see the most recent data, and
-caching  may lead to them being presented with out-of-date information.
 
-- There is concern about the overhead of maintaining the accuracy and freshness of
-cached data and the coding complications that this might cause.
+## How to fix the problem
 
-- Direct access to data might form part of an on-premises system where network
-latency is not an issue, the system runs on expensive high performance hardware, and
-caching is not considered. If this system is migrated to the cloud, network latency is
-increased, and it is typically hosted on commodity hardware in a remote datacenter.
-An explicit decision needs to be made to explore the possible performance benefits of
-caching.
+The most popular caching strategy is the *on-demand* or [*cache-aside*][cache-aside-pattern] strategy. This approach is suitable for data that changes frequently.
 
-- A lack of awareness that caching is a possibility in a given scenario. A common
-example concerns the use of ETags when implementing a Web API.
+- On read, the application first tries to get data from the cache. If the data isn't in the cache, the application retrieves it from the data source and adds it to the cache.
+- On write, the application writes the change directly to the data source and removes the old value from the cache. It will be retrieved and added to the cache the next time it is required.
 
-- The benefits (and sometimes the drawbacks) of using a cache are misunderstood.
+To prevent data from becoming stale, many caching solutions support configurable expiration periods, so that data is removed from the cache after a specified interval. 
 
+Here is the previous example updated to use the Cache-Aside pattern. Notice that the `GetAsync` method in the repository now calls the `CacheService` class, rather than calling the database directly. 
+
+```csharp
+public class CachedPersonRepository : IPersonRepository
+{
+    private readonly PersonRepository _innerRepository;
+
+    public CachedPersonRepository(PersonRepository innerRepository)
+    {
+        _innerRepository = innerRepository;
+    }
+
+    public async Task<Person> GetAsync(int id)
+    {
+        return await CacheService.GetAsync<Person>("p:" + id, () => _innerRepository.GetAsync(id)).ConfigureAwait(false);
+    }
+}
+```
+
+The `GetAsync` method in `CacheService` first tries to get the data from Azure Redis Cache. If the value isn't found in Redis Cache, the method invokes a lambda function that was passed to it by the caller. The lamba function is responsible for fetching the data from the database. This implementation decouples the repository from the choice of cache storage, and decouples the `CacheService` from the choice of database. 
+
+```csharp
+public class CacheService
+{
+    private static ConnectionMultiplexer _connection;
+
+    public static async Task<T> GetAsync<T>(string key, Func<Task<T>> loadCache, double expirationTimeInMinutes)
+    {
+        IDatabase cache = Connection.GetDatabase();
+        T value = await GetAsync<T>(cache, key).ConfigureAwait(false);
+        if (value == null)
+        {
+            // Value was not found in the cache. Call the lambda to get the value from the database.
+            value = await loadCache().ConfigureAwait(false);
+            if (value != null)
+            {
+                // Add the value to the cache.
+                await SetAsync(cache, key, value, expirationTimeInMinutes).ConfigureAwait(false);
+            }
+        }
+        return value;
+    }
+}
+```
+
+## Considerations
+
+- If the cache is unavailable, perhaps because of a transient failure, don't return an error to the client. Instead, fetch the data from the original data source. However, be aware that while the cache is being recovered, the original data store could be swamped with requests, resulting in timeouts and failed connections. (After all, this is one of the motivations for using a cache in the first place.) Use a technique such as the [Circuit Breaker pattern][circuit-breaker] to avoid overwhelming the data source.
+
+- Applications that cache nonstatic data should be designed to support [eventual consistency][data-consistency-guidance].
+
+- For web APIs, you can support client-side caching by including a Cache-Control in request and response messages, and using ETags to identify versions of objects. See [Considerations for optimizing client-side data access][client-cache].
+
+- You don't have to cache entire entities. If most of an entity is static but only a small piece is changes frequently, cache the static elements and retrieve the dynamic elements from the data source. This approach can help to reduce the volume of I/O being performed against the data source.
+
+- In some cases, it's useful to cache volatile data, if that data is short-lived. For example, consider a device that continually sends status updates. It might make sense to cache this information, and not write it to a persistent store at all, because it's OK if the application loses an occasional message. But consider whether other requirements, such as auditing, require putting the data into a persistent store. 
+
+- Besides caching data from an external data source, you can use caching to save the results of complex computations. 
+
+- It might be useful to prime the cache when the application start. Populate the cache with the data that is most likely to be used.
+
+- Always include instrumentation that detects cache hits and cache misses. Use this information to tune caching policies, such what data to cache, and how long to hold data in the cache before it expires.
 
 ## How to detect the problem
+
 A complete lack of caching can lead to poor response times when retrieving data due
 to the latency when accessing a remote data store, increased contention in the data
 store, and an associated lack of scalability as more users request data from the
@@ -251,7 +286,7 @@ FROM [Person].[Person] AS [Extent1]
 WHERE [Extent1].[BusinessEntityId] = @p__linq__0
 ```
 
-In the [CachingDemo sample application][fullDemonstrationOfProblem] shown earlier
+In the [CachingDemo sample application][sample-app] shown earlier
 this query is the result of the request generated by Entity Framework. This query is
 repeated each time the `GetByIdAsync` method runs. The value of the `id` parameter
 passed in to this method replaces the `p__linq__0` parameter in the SQL query.
@@ -266,126 +301,6 @@ information, so additional instrumentation and profiling might be necessary, as
 described in the following sections.
 
 ----------
-
-## <a name="HowToCorrectTheProblem"></a>How to correct the problem
-You can use several strategies to implement caching. The most popular is the
-*on-demand* or [*cache-aside*][cache-aside-pattern] strategy. In this strategy, the
-application attempts to retrieve data from the cache. If the data is not present, the
-application retrieves it from the data store and adds it to the cache so it will be
-found next time. To prevent the data from becoming stale, many caching solutions
-support configurable timeouts, allowing data to automatically expire and be removed
-from the cache after a specified interval. If the application modifies data, it
-should write the change directly to the data store and remove the old value from the
-cache. It will be retrieved and added to the cache the next time it is required.
-
-This approach is suitable for data that changes regularly, although there may be a
-period during which an application might be served out-of-date
-information. The following code snippet shows a version of the `GetAsync` method
-presented earlier that uses caching. The `CachedPersonRepository` class makes use of
-the generic `CacheService` class to retrieve data. The `GetAsync` method in this
-class implements the Cache-Aside pattern. It examines the cache to see whether an
-item with a matching key is available in the cache, and if so the method returns this
-item. If no such item is cached, it is retrieved from the database and added to the
-cache.
-
-----------
-
-**Note:** This snippet is taken from the [sample code][fullDemonstrationOfSolution]
-available with this antipattern. The sample code uses [Azure Redis Cache][Azure-cache] to store data and the [StackExchange.Redis][StackExchange] client
-library to communicate with the cache.
-
-----------
-
-**C#**
-
-```csharp
-public class CachedPersonRepository : IPersonRepository
-{
-    private readonly PersonRepository _innerRepository;
-
-    public CachedPersonRepository(PersonRepository innerRepository)
-    {
-        _innerRepository = innerRepository;
-    }
-
-    public async Task<Person> GetAsync(int id)
-    {
-        return await CacheService.GetAsync<Person>("p:" + id, () => _innerRepository.GetAsync(id)).ConfigureAwait(false);
-    }
-}
-
-...
-
-public class CacheService
-{
-    private static ConnectionMultiplexer _connection;
-    ...
-
-    public static async Task<T> GetAsync<T>(string key, Func<Task<T>> loadCache, double expirationTimeInMinutes)
-    {
-        ...
-        IDatabase cache = Connection.GetDatabase();
-        T value = await GetAsync<T>(cache, key).ConfigureAwait(false);
-        if (value == null)
-        {
-            value = await loadCache().ConfigureAwait(false);
-            if (value != null)
-            {
-                await SetAsync(cache, key, value, expirationTimeInMinutes).ConfigureAwait(false);
-            }
-        }
-
-        return value;
-    }
-    ...
-}
-```
-
-You should consider the following points concerning caching:
-
-- Your application code should not depend on the availability of the cache. If it is
-inaccessible your code should not fail, but instead it should fetch data from the the
-original data source.
-
-- You don't have to cache entire entities. If the bulk of an entity is static but
-only a small piece is subject to regular changes, then cache the static elements and
-retrieve only the dynamic pieces from the data source. This approach can help to
-reduce the volume of I/O being performed against the data source.
-
-- The possible differences between cached data and data held in the underlying data
-source mean that applications that use caching for nonstatic data should be designed
-to support [eventual consistency][data-consistency-guidance].
-
-- In some cases caching volatile information can prove to be helpful if this
-information is temporary in nature. For example, consider a device that continually
-reports status information or some other measurement. If an application chooses not
-to cache this data on the basis that the cached information will nearly always be
-outdated, then the same consideration could be true when storing and retrieving this
-information from a data store, in the time taken to save and fetch this data it may
-have changed. In this situation, consider the benefits of storing the
-dynamic information directly in the cache instead of a persistent data store. If the
-data is noncritical and auditing is not required, then it does not matter if
-the occasional change is lost.
-
-- If you are building REST web services, include support for client-side caching by
-providing a cache header <<RBC: In a brief MSDN search I could find no reason for this to be hyphenated other than the overall excessive hyphenation (seriously were they on sale?) in these docs. Please reject the deletion if this will affect tech meaning.>> in request and response messages, and identify versions of
-objects using ETags.
-
-- Caching doesn't just apply to data held in a remote data source. You can use
-caching to save the results of complex computations that are performed regularly. In
-this way, rather than expending processing resources (and time) repeating calculations, an application might be able to retrieve results computed earlier.
-
-- Falling back to the original data store if the cache is temporarily unavailable may
-have a scalability impact on the system. While the cache is being recovered, the
-original data store could be swamped with requests for data, resulting in timeouts
-and failed connections.
-
-- It might be useful to prime the cache on system startup. The cache can be populated
-with the data that is most likely to be used.
-
-- Always include instrumentation that detects cache hits and cache misses. This
-information can be used to tune caching policies (for example, what to cache, and how
-long to hold it in the cache before it expires).
 
 
 ## Consequences of the solution
@@ -427,17 +342,16 @@ potential throughput of the application can require that the infrastructure the 
 
 - [Caching Guidance][caching-guidance].
 
-- [Azure Cache documentation][Azure-cache].
 
 
-[fullDemonstrationOfProblem]: https://github.com/mspnp/performance-optimization/tree/master/NoCaching
-[fullDemonstrationOfSolution]: https://github.com/mspnp/performance-optimization/tree/master/NoCaching
-[AdventureWorks2012]:http://msftdbprodsamples.codeplex.com/releases/view/37304
-[StackExchange]: https://github.com/StackExchange/StackExchange.Redis
+[sample-app]: https://github.com/mspnp/performance-optimization/tree/master/NoCaching
 [cache-aside-pattern]: https://msdn.microsoft.com/library/dn589799.aspx
+[circuit-breaker]: ../../patterns/circuit-breaker.md
+[client-cache]: ../../best-practices/api-implementation.md#considerations-for-optimizing-client-side-data-access
 [data-consistency-guidance]: http://LINK-TO-CONSISTENCY-GUIDANCE-WHEN-PUBLISHED
+
+
 [caching-guidance]: https://msdn.microsoft.com/library/dn589802.aspx
-[Azure-cache]: http://azure.microsoft.com/documentation/services/cache/
 [AppInsights]: http://azure.microsoft.com/documentation/articles/app-insights-get-started/
 [NLog]: http://nlog-project.org
 [Log4Net]: http://logging.apache.org/log4net
@@ -450,3 +364,4 @@ potential throughput of the application can require that the infrastructure the 
 [Performance-Load-Test-Results-Uncached]:_images/InitialLoadTestResults.jpg
 [Dynamic-Management-Views]: _images/SQLServerManagementStudio.jpg
 [Performance-Load-Test-Results-Cached]: _images/CachedLoadTestResults.jpg
+
