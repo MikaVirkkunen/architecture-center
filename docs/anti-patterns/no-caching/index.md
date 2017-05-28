@@ -10,13 +10,13 @@ In a cloud application that handles many concurrent requests, repeatedly fetchin
 
 ## Problem description
 
-When data is not cached, it can cause 
+When data is not cached, it can result reduce application performance for several reasons:
 
-- Repeatedly retrieving the same information from a resource that is expensive to access, in terms of I/O overhead or latency, such as a database.
-- Using processing resources to construct the same items for multiple requests.
-- Making excessive calls to a service that charges for consumption, or that has service quotas and throttles clients past a certain limit.
+- The application repeatedly retrieves the same information from a resource that is expensive to access, in terms of I/O overhead or latency.
+- The application uses processing resources to construct the same objects or data structures for multiple requests.
+- The application makes excessive calls to a service that charges for consumption, or that has a service quota and throttles clients past a certain limit.
 
-The following code uses Entity Framework to connect to a database. Every client request results in a call to the database, even if multiple requests are fetching exactly the same data. The cost of repeated requests, in terms of I/O overhead and data access charges, can accumulate quickly. You can find the complete sample [here][sample-app].
+The following code uses Entity Framework to connect to a database. Every client request results in a call to the database, even if multiple requests are fetching exactly the same data. The cost of repeated requests, in terms of I/O overhead and data access charges, can accumulate quickly.
 
 ```csharp
 public class PersonRepository : IPersonRepository
@@ -34,12 +34,13 @@ public class PersonRepository : IPersonRepository
 }
 ```
 
+You can find the complete sample [here][sample-app].
+
 This antipattern typically occurs because:
 
-- Adding caching makes the code more complicated. Directly reading and writing to a data store is the simplest implementation.  
+- Directly reading and writing to a data store is the simplest implementation. Caching makes the code more complicated. 
 - There is concern about the overhead of maintaining the accuracy and freshness of cached data.
-- An application was migrated from an on-premises system, where network latency was not an issue, the system ran on expensive high-performance hardware, and
-so caching wasn't considered in the original design. 
+- An application was migrated from an on-premises system, where network latency was not an issue, and the system ran on expensive high-performance hardware, so caching wasn't considered in the original design.
 - Developers aren't aware that caching is a possibility in a given scenario. For example, developers may not think of using ETags when implementing a web API.
 - The benefits and drawbacks of using a cache are not clearly understood.
 
@@ -50,8 +51,6 @@ The most popular caching strategy is the *on-demand* or [*cache-aside*][cache-as
 
 - On read, the application first tries to get data from the cache. If the data isn't in the cache, the application retrieves it from the data source and adds it to the cache.
 - On write, the application writes the change directly to the data source and removes the old value from the cache. It will be retrieved and added to the cache the next time it is required.
-
-To prevent data from becoming stale, many caching solutions support configurable expiration periods, so that data is removed from the cache after a specified interval. 
 
 Here is the previous example updated to use the Cache-Aside pattern. Notice that the `GetAsync` method in the repository now calls the `CacheService` class, rather than calling the database directly. 
 
@@ -101,6 +100,10 @@ public class CacheService
 ## Considerations
 
 - If the cache is unavailable, perhaps because of a transient failure, don't return an error to the client. Instead, fetch the data from the original data source. However, be aware that while the cache is being recovered, the original data store could be swamped with requests, resulting in timeouts and failed connections. (After all, this is one of the motivations for using a cache in the first place.) Use a technique such as the [Circuit Breaker pattern][circuit-breaker] to avoid overwhelming the data source.
+
+- To prevent data from becoming stale, many caching solutions support configurable expiration periods, so that data is automatically removed from the cache after a specified interval. You may need to tune this value for your scenario.
+
+- If the caching solution does not provide built-in expiration, you may need to implement a background process that sweeps, to prevent the cache from growing without limits, and to purge stale data. 
 
 - Applications that cache nonstatic data should be designed to support [eventual consistency][data-consistency-guidance].
 
