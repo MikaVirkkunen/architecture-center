@@ -101,9 +101,7 @@ public class CacheService
 
 - If the cache is unavailable, perhaps because of a transient failure, don't return an error to the client. Instead, fetch the data from the original data source. However, be aware that while the cache is being recovered, the original data store could be swamped with requests, resulting in timeouts and failed connections. (After all, this is one of the motivations for using a cache in the first place.) Use a technique such as the [Circuit Breaker pattern][circuit-breaker] to avoid overwhelming the data source.
 
-- To prevent data from becoming stale, many caching solutions support configurable expiration periods, so that data is automatically removed from the cache after a specified interval. You may need to tune this value for your scenario.
-
-- If the caching solution does not provide built-in expiration, you may need to implement a background process that sweeps, to prevent the cache from growing without limits, and to purge stale data. 
+- To prevent data from becoming stale, many caching solutions support configurable expiration periods, so that data is automatically removed from the cache after a specified interval. You may need to tune this value for your scenario. If the caching solution doesn't provide built-in expiration, you may need to implement a background process that sweeps that cache, to prevent it from growing without limits, and to purge stale data. 
 
 - Applications that cache nonstatic data should be designed to support [eventual consistency][data-consistency-guidance].
 
