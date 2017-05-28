@@ -109,9 +109,9 @@ public class CacheService
 
 - You don't have to cache entire entities. If most of an entity is static but only a small piece is changes frequently, cache the static elements and retrieve the dynamic elements from the data source. This approach can help to reduce the volume of I/O being performed against the data source.
 
-- In some cases, it's useful to cache volatile data, if that data is short-lived. For example, consider a device that continually sends status updates. It might make sense to cache this information, and not write it to a persistent store at all, because it's OK if the application loses an occasional message. But consider whether other requirements, such as auditing, require putting the data into a persistent store. 
+- In some cases, it's useful to cache volatile data, if that data is short-lived. For example, consider a device that continually sends status updates. It might make sense to cache this information as it arrives, and not write it to a persistent store at all.  
 
-- Besides caching data from an external data source, you can use caching to save the results of complex computations. 
+- Besides caching data from an external data source, you can use caching to save the results of complex computations. However, you should instrument the application first to determine whether it's actually CPU-bound.
 
 - It might be useful to prime the cache when the application start. Populate the cache with the data that is most likely to be used.
 
