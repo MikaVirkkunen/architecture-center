@@ -6,6 +6,8 @@ author: dragon119
 
 # Improper Instantiation antipattern
 
+It can hurt performance to continually create new instances of an object that is meant to be created once and then shared. 
+
 ## Problem description
 
 Many .NET Framework libraries provide abstractions of external resources. Internally, these classes typically manage their own connections to the resource, acting as brokers that clients can use to access the resource. Here are some examples of this type of broker class that are relevant to Azure applications:
