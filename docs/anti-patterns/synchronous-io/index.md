@@ -94,8 +94,6 @@ The `await` operator returns control to the calling environment while the asynch
 
 A well designed service should also provide asynchronous operations. Here is an asynchronous version of the web service that returns user profiles. The `GetUserProfileAsync` method depends on having an asynchronous version of the User Profile service.
 
-**C#**
-
 ```csharp
 public interface IUserProfileService
 {
