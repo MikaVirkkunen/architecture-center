@@ -1,45 +1,38 @@
 ---
 title: Synchronous I/O antipattern
 description: 
-
 author: dragon119
-manager: christb
-
-pnp.series.title: Optimize Performance
 ---
+
 # Synchronous I/O antipattern
-[!INCLUDE [header](../../_includes/header.md)]
 
-A synchronous I/O operation blocks the calling thread while the I/O completes. The
-calling thread enters a wait state and is unable to perform useful work during this
-interval. The result is that processing resources are wasted. In a cloud-based web
-application or service that serves multiple concurrent requests, this approach can
-adversely affect the vertical scalability of the system.
+Blocking the calling thread while I/O completes can reduce performance and affect vertical scalability.
 
-Common examples of synchronous I/O include:
+## Problem description
+
+A synchronous I/O operation blocks the calling thread while the I/O completes. The calling thread enters a wait state and is unable to perform useful work during this interval, wasting processing resources.
+
+Common examples of I/O include:
 
 - Retrieving or persisting data to a database or any type of persistent storage.
-
-- Sending a request to a web service and waiting for a response.
-
+- Sending a request to a web service.
 - Posting a message or retrieving a message from a queue.
-
 - Writing to or reading from a local file.
 
-This antipattern typically occurs because:
+This antipattern typically occurs because 
 
-- It appears to be the most intuitive way to perform an operation. For example, the
-following code looks to be the obvious way to upload a file to an Azure blob storage.
+- It appears to be the most intuitive way to perform an operation. 
+- The application requires a response from a request.
+- The application uses a library that only provides synchronous methodss for I/O. 
+- An external library performs synchronous I/O operations internally. A single synchronous I/O call can block an entire call chain.
 
-**C#**
+The following code uploads a file to an Azure blob storage. There are two places where the code blocks waiting for synchronous I/O: `CreateIfNotExists` and `UploadFromStream`.
 
 ```csharp
-var storageAccount = CloudStorageAccount.Parse(...);
 var blobClient = storageAccount.CreateCloudBlobClient();
 var container = blobClient.GetContainerReference("uploadedfiles");
 
 container.CreateIfNotExists();
-
 var blockBlob = container.GetBlockBlobReference("myblob");
 
 // Create or overwrite the "myblob" blob with contents from a local file.
@@ -49,16 +42,14 @@ using (var fileStream = File.OpenRead(HostingEnvironment.MapPath("~/FileToUpload
 }
 ```
 
-- The application requires a response from the request, as shown by the following
-code example. The `GetUserProfile` method is part of a web service that retrieves
-user profile information from a User Profile service (through the
-`FakeUserProfileService` class that handles all of the connection and routing
-details) and then returns it to a client. The thread running the `GetUserProfile`
-method will be blocked waiting for the response from the User Profile service.
-
-**C#**
+Here's an example of waiting for a response from an external service. The `GetUserProfile` method calls a remote service that returns a `UserProfile`.
 
 ```csharp
+public interface IUserProfileService
+{
+    UserProfile GetUserProfile();
+}
+
 public class SyncController : ApiController
 {
     private readonly IUserProfileService _userProfileService;
@@ -76,27 +67,81 @@ public class SyncController : ApiController
 }
 ```
 
-----------
+You can find the complete code for both of these examples [here][sample-app].
 
-The code for these two examples form part of the [Synchronous I/O sample application][fullDemonstrationOfProblem].
+## How to fix the problem
 
-----------
+Replace synchronous I/O operations with asynchronous requests. This frees the current thread to continue performing meaningful work rather than blocking, and helps improve the utilization of compute resources. Performing I/O asynchronously is particularly efficient for handling an unexpected surge in requests from client applications. 
 
-- The application uses a library that performs I/O and that does not provide
-asynchronous operations. For example:
+Many libraries provide both synchronous and asynchronous versions of methods. Whenever possible, use the asynchronous versions.
+
+Here is the asynchronous version of the earlier example that uploads to Azure blob storage.
+
+```csharp
+var blobClient = storageAccount.CreateCloudBlobClient();
+var container = blobClient.GetContainerReference("uploadedfiles");
+
+await container.CreateIfNotExistsAsync();
+
+var blockBlob = container.GetBlockBlobReference("myblob");
+
+// Create or overwrite the "myblob" blob with contents from a local file.
+using (var fileStream = File.OpenRead(HostingEnvironment.MapPath("~/FileToUpload.txt")))
+{
+    await blockBlob.UploadFromStreamAsync(fileStream);
+}
+```
+
+This code uses the `await` operator to return control to the calling environment while the asynchronous operation is performed. The subsequent code effectively acts as a continuation that runs when the asynchronous operation has completed.
+
+A well designed service should also provide asynchronous operations. Here is an asynchronous version of the web service that returns user profiles. The `GetUserProfileAsync` method depends on having an asynchronous version of the User Profile service.
 
 **C#**
 
 ```csharp
-var result = LibraryIOOperation();
-// Wait while the method completes
+public interface IUserProfileService
+{
+    Task<UserProfile> GetUserProfileAsync();
+}
 
-Console.WriteLine("{0}", result);
+public class AsyncController : ApiController
+{
+    private readonly IUserProfileService _userProfileService;
+
+    public AsyncController()
+    {
+        _userProfileService = new FakeUserProfileService();
+    }
+
+    // This is an synchronous method that calls the Task based GetUserProfileAsync method.
+    public Task<UserProfile> GetUserProfileAsync()
+    {
+        return _userProfileService.GetUserProfileAsync();
+    }
+}
 ```
 
-- Synchronous I/O operations are hidden in an external library used by the
-application. A single synchronous I/O call embedded deep within a series of cascading
-operations can block an entire call chain.
+For libraries that don't provide asynchronous versions of operations, it may be possible to create asynchronous wrappers around selected synchronous methods.
+
+Follow this approach with caution. While it may improve responsiveness on the thread that invokes the asynchronous wrapper, it actually consumes more resources. An extra thread may be created, and there is overhead associated with synchronizing the work done by this thread. Some tradeoffs are discussed in this blog post: [Should I expose asynchronous wrappers for synchronous methods?][async-wrappers]
+
+Here is an example of an asynchronous wrapper around a synchronous method.
+
+```csharp
+// Asynchronous wrapper around synchronous library method
+private async Task<int> LibraryIOOperationAsync()
+{
+    return await Task.Run(() => LibraryIOOperation());
+}
+```
+
+Now calling code can `await` the wrapper.
+
+```csharp
+// Invoke the asynchronous wrapper using a task
+await LibraryIOOperationAsync();
+```
+
 
 ## How to detect the problem
 From the viewpoint of a user running an application that performs synchronous I/O
@@ -234,114 +279,6 @@ will increase the ASP.NET queue length.
 
 ----------
 
-## How to correct the problem
-Replace synchronous I/O operations with asynchronous requests. Performing an I/O
-operation asynchronously can free the current thread to continue performing
-meaningful work rather than being blocked waiting for a slow device or network to
-respond. This helps improve the utilization of expensive compute resources.
-Performing I/O asynchronously is particularly efficient for handling an unexpected
-surge in requests from client applications. This strategy helps enhance the
-scalability and availability of the system handling requests.
-
-Some libraries provide asynchronous versions of the available I/O operations. For
-example, the following code uploads data to Azure blob storage asynchronously.
-
-**C#**
-
-```csharp
-var storageAccount = CloudStorageAccount.Parse(...);
-var blobClient = storageAccount.CreateCloudBlobClient();
-var container = blobClient.GetContainerReference("uploadedfiles");
-
-await container.CreateIfNotExistsAsync();
-
-var blockBlob = container.GetBlockBlobReference("myblob");
-
-// Create or overwrite the "myblob" blob with contents from a local file.
-using (var fileStream = File.OpenRead(HostingEnvironment.MapPath("~/FileToUpload.txt")))
-{
-    await blockBlob.UploadFromStreamAsync(fileStream);
-}
-```
-
-This code creates a new `Task` to perform the file upload operation on. The I/O
-operation is started and the thread is released, becoming available to perform other
-work. When the I/O operation completes, the next available thread is used to continue
-the processing for the remainder of the method (the call to `ConfigureAwait(false)`
-indicates that this does not have to be the same thread that initiated the task.)
-
-
-----------
-
-**Note:** This code uses the `await` operator to return control to the calling
-environment while the asynchronous operation is performed. The subsequent code
-effectively acts as a continuation that runs when the asynchronous operation has
-completed.
-
-----------
-
-A well designed service should also provide asynchronous operations. The example
-below illustrates an asynchronous version of the web service that returns user
-profile information. The `GetUserProfileAsync` method depends on an asynchronous
-version of the User Profile service that doesn't block the calling thread.
-
-**C#**
-
-```csharp
-public class AsyncController : ApiController
-{
-    private readonly IUserProfileService _userProfileService;
-
-    public AsyncController()
-    {
-        _userProfileService = new FakeUserProfileService();
-    }
-
-    // This is an synchronous method that calls the Task based GetUserProfileAsync method.
-    public Task<UserProfile> GetUserProfileAsync()
-    {
-        return _userProfileService.GetUserProfileAsync();
-    }
-}
-```
-
-----------
-
-The code for these two examples is available in the [Synchronous I/O solution][fullDemonstrationOfSolution] available with this antipattern.
-
-----------
-
-For libraries that do not provide asynchronous versions of operations, it may be
-possible to create asynchronous wrappers around selected synchronous methods.
-**However, you should follow this approach with caution.** While this strategy may
-improve responsiveness on the thread invoking the asynchronous wrapper (which is
-useful if the thread is handling the user interface), it actually consumes more
-resources. <<RBC: Does breaking this here work? If not, other suggestions? This is a pretty long convoluted sentence otherwise.>> An additional thread may be created, and there is additional overhead
-associated with synchronizing the work performed by this thread. For more
-information, see the article [Should I expose asynchronous wrappers for synchronous methods?][async-wrappers]:
-
-**C#**
-
-```csharp
-// Asynchronous wrapper around synchronous library method
-private async Task<int> LibraryIOOperationAsync()
-{
-    return await Task.Run(() => LibraryIOOperation());
-}
-
-...
-// Invoke the asynchronous wrapper using a task
-var libraryTask = LibraryIOOperationAsync();
-
-// Use a continuation to handle the result of the LibraryIOOperation method
-libraryTask.ContinueWith((task) =>
-{
-    Console.WriteLine("Result from LibraryIOOperation is {0}", task.Result);
-});
-
-// Processing continues while the LibraryIOOperation method is run asynchronously
-Console.WriteLine("Work performed while LibraryIOOperation is running asynchronously");
-```
 
 ## Consequences of the solution
 
@@ -368,7 +305,7 @@ stores to help reduce contention.
 
 - [Analyzing logs collected with Azure Diagnostics][analyzing-logs]
 
-[fullDemonstrationOfProblem]: https://github.com/mspnp/performance-optimization/tree/master/SynchronousIO
+[sample-app]: https://github.com/mspnp/performance-optimization/tree/master/SynchronousIO
 [fullDemonstrationOfSolution]: https://github.com/mspnp/performance-optimization/tree/master/SynchronousIO
 [async-wrappers]: http://blogs.msdn.com/b/pfxteam/archive/2012/03/24/10287244.aspx
 [AsyncASPNETMethods]: http://www.asp.net/web-forms/overview/performance-and-caching/using-asynchronous-methods-in-aspnet-45
