@@ -19,14 +19,14 @@ Common examples of I/O include:
 - Posting a message or retrieving a message from a queue.
 - Writing to or reading from a local file.
 
-This antipattern typically occurs because 
+This antipattern typically occurs because:
 
 - It appears to be the most intuitive way to perform an operation. 
 - The application requires a response from a request.
-- The application uses a library that only provides synchronous methodss for I/O. 
+- The application uses a library that only provides synchronous methods for I/O. 
 - An external library performs synchronous I/O operations internally. A single synchronous I/O call can block an entire call chain.
 
-The following code uploads a file to an Azure blob storage. There are two places where the code blocks waiting for synchronous I/O: `CreateIfNotExists` and `UploadFromStream`.
+The following code uploads a file to Azure blob storage. There are two places where the code blocks waiting for synchronous I/O: the `CreateIfNotExists` method and the `UploadFromStream` method.
 
 ```csharp
 var blobClient = storageAccount.CreateCloudBlobClient();
@@ -71,11 +71,9 @@ You can find the complete code for both of these examples [here][sample-app].
 
 ## How to fix the problem
 
-Replace synchronous I/O operations with asynchronous requests. This frees the current thread to continue performing meaningful work rather than blocking, and helps improve the utilization of compute resources. Performing I/O asynchronously is particularly efficient for handling an unexpected surge in requests from client applications. 
+Replace synchronous I/O operations with asynchronous operations. This frees the current thread to continue performing meaningful work rather than blocking, and helps improve the utilization of compute resources. Performing I/O asynchronously is particularly efficient for handling an unexpected surge in requests from client applications. 
 
-Many libraries provide both synchronous and asynchronous versions of methods. Whenever possible, use the asynchronous versions.
-
-Here is the asynchronous version of the earlier example that uploads to Azure blob storage.
+Many libraries provide both synchronous and asynchronous versions of methods. Whenever possible, use the asynchronous versions. Here is the asynchronous version of the previous example that uploads a file to Azure blob storage.
 
 ```csharp
 var blobClient = storageAccount.CreateCloudBlobClient();
@@ -92,7 +90,7 @@ using (var fileStream = File.OpenRead(HostingEnvironment.MapPath("~/FileToUpload
 }
 ```
 
-This code uses the `await` operator to return control to the calling environment while the asynchronous operation is performed. The subsequent code effectively acts as a continuation that runs when the asynchronous operation has completed.
+The `await` operator returns control to the calling environment while the asynchronous operation is performed. The code after this statement acts as a continuation that runs when the asynchronous operation has completed.
 
 A well designed service should also provide asynchronous operations. Here is an asynchronous version of the web service that returns user profiles. The `GetUserProfileAsync` method depends on having an asynchronous version of the User Profile service.
 
@@ -121,9 +119,7 @@ public class AsyncController : ApiController
 }
 ```
 
-For libraries that don't provide asynchronous versions of operations, it may be possible to create asynchronous wrappers around selected synchronous methods.
-
-Follow this approach with caution. While it may improve responsiveness on the thread that invokes the asynchronous wrapper, it actually consumes more resources. An extra thread may be created, and there is overhead associated with synchronizing the work done by this thread. Some tradeoffs are discussed in this blog post: [Should I expose asynchronous wrappers for synchronous methods?][async-wrappers]
+For libraries that don't provide asynchronous versions of operations, it may be possible to create asynchronous wrappers around selected synchronous methods. Follow this approach with caution. While it may improve responsiveness on the thread that invokes the asynchronous wrapper, it actually consumes more resources. An extra thread may be created, and there is overhead associated with synchronizing the work done by this thread. Some tradeoffs are discussed in this blog post: [Should I expose asynchronous wrappers for synchronous methods?][async-wrappers]
 
 Here is an example of an asynchronous wrapper around a synchronous method.
 
@@ -135,7 +131,7 @@ private async Task<int> LibraryIOOperationAsync()
 }
 ```
 
-Now calling code can `await` the wrapper.
+Now the calling code can await on the wrapper:
 
 ```csharp
 // Invoke the asynchronous wrapper using a task
