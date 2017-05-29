@@ -1,5 +1,4 @@
-# Anti-patterns
-
+# Performance antipatterns
 ## [Busy Database](./busy-database/index.md)
 ## [Busy Front End](./busy-front-end/index.md)
 ## [Chatty I/O](./chatty-io/index.md)
