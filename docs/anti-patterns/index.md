@@ -7,10 +7,9 @@ manager: christb
 
 pnp.series.title: Optimize Performance
 ---
-# Introduction
-[!INCLUDE [header](../_includes/header.md)]
 
-## What not to do if you want your systems to be fast and scalable <<RBC: I agree this isn't the greatest title. Could we just make it positive? "What to do...">>
+# Performance antipatterns for cloud applications
+
 
 Building applications that you can deploy to the cloud using Azure is relatively simple. Building applications that scale well and run fast under a heavy load in the cloud is more difficult. A common scenario is that an application appears to perform well during performance testing and displays no problems. But once it is released to the cloud, accessed by a large number of concurrent users, and subjected to a much bigger, more random workload it frequently exhibits undesirable behavior (such as rejecting user requests, stalling, or throwing exceptions). The development team is then faced with two questions:
 

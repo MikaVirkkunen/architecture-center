@@ -193,21 +193,12 @@ system successfully handles a nearly tenfold increase in throughput, as measured
 requests per second. Moreover, the average response time is relatively constant and remains approximately 25 times smaller than the previous test.
 
 
-
-
-
 [sample-app]: https://github.com/mspnp/performance-optimization/tree/master/SynchronousIO
 
 
 [async-wrappers]: http://blogs.msdn.com/b/pfxteam/archive/2012/03/24/10287244.aspx
 [performance-counters]: /azure/cloud-services/cloud-services-dotnet-diagnostics-performance-counters
 [web-sites-monitor]: /azure/app-service-web/web-sites-monitor
-
-
-[MaxConcurrentRequestsPerCPU]: https://msdn.microsoft.com/library/system.web.hosting.hostingenvironment.maxconcurrentrequestspercpu.aspx
-[MaxConcurrentThreadsPerCPU]: https://msdn.microsoft.com/library/system.web.hosting.hostingenvironment.maxconcurrentthreadspercpu.aspx
-
-
 
 [sync-performance]: _images/SyncPerformance.jpg
 [async-performance]: _images/AsyncPerformance.jpg
