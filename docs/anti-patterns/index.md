@@ -1,5 +1,5 @@
 ---
-title: Optimize Performance for Cloud Applications
+title: Performance antipatterns for cloud applications
 description: 
 author: dragon119
 ---
@@ -15,7 +15,7 @@ Here is a common scenario: An application behaves well during performance testin
 
 The answer to the first question is straightforward. It's very difficult in a test environment to simulate real users, their behavior patterns, and the volumes of work they might perform. The only completely sure way to understand how a system behaves under load is to observe it in production. To be clear, we aren't suggesting that you should skip performance testing. Performance tests are crucial for getting baseline performance metrics. But you must be prepared to observe and correct performance issues when they arise in the live system.
 
-The answer to the second question, how to fix problem, is less straightforward. Any number of factors might contribute, and sometimes the problem only manifests under certain circumstances. Instrumentation and logging are key to finding the root cause, but you also have to know what to look for. These antipatterns are intended to give you a starting point for your investigations.
+The answer to the second question, how to fix the problem, is less straightforward. Any number of factors might contribute, and sometimes the problem only manifests under certain circumstances. Instrumentation and logging are key to finding the root cause, but you also have to know what to look for. These antipatterns are intended to give you a starting point for your investigations.
 
 Here is the list of antipatterns that we've identified: 
 
