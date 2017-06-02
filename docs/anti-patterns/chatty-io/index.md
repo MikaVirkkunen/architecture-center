@@ -6,7 +6,7 @@ author: dragon119
 
 # Chatty I/O antipattern
 
-A large number of I/O requests can have a significant impact on performance and responsiveness.
+The cumulative effect of a large number of I/O requests can have a significant impact on performance and responsiveness.
 
 ## Problem description
 

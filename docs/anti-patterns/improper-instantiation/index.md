@@ -10,14 +10,14 @@ It can hurt performance to continually create new instances of an object that is
 
 ## Problem description
 
-Many .NET Framework libraries provide abstractions of external resources. Internally, these classes typically manage their own connections to the resource, acting as brokers that clients can use to access the resource. Here are some examples of this type of broker class that are relevant to Azure applications:
+Many libraries provide abstractions of external resources. Internally, these classes typically manage their own connections to the resource, acting as brokers that clients can use to access the resource. Here are some examples of brokerer classes that are relevant to Azure applications:
 
 - `System.Net.Http.HttpClient`. Communicates with a web service using HTTP.
 - `Microsoft.ServiceBus.Messaging.QueueClient`. Posts and receives messages to a Service Bus queue. 
 - `Microsoft.Azure.Documents.Client.DocumentClient`. Connects to a Cosmos DB instance
 - `StackExchange.Redis.ConnectionMultiplexer`. Connects to Redis, including Azure Redis Cache.
 
-These broker classes can be expensive to create. They are intended to be instantiated once and reused throughout the lifetime of an application. However, it's a common misunderstanding that these classes should acquired only as necessary and released quickly.
+These classes are intended to be instantiated once and reused throughout the lifetime of an application. However, it's a common misunderstanding that these classes should acquired only as necessary and released quickly. (The ones listed here happen to be .NET libraries, but the pattern is not unique to .NET.)
 
 The following ASP.NET example creates an instance of `HttpClient` to communicate with a remote service. You can find the complete sample [here][sample-app].
 
